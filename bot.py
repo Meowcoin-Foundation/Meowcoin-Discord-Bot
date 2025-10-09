@@ -5,7 +5,6 @@ import aiohttp
 import time
 import os
 from dotenv import load_dotenv
-import json
 
 # Load env variables
 load_dotenv()
@@ -23,6 +22,31 @@ client = commands.Bot(command_prefix="!", intents=intents)
 
 # Define a global variable to store the last notification time
 last_notification_time = 0
+
+# Function to make RPC calls to the new Meowcoin RPC endpoint
+async def make_rpc_call(session, method, params=None):
+    """
+    Make an RPC call to the Meowcoin RPC endpoint
+    """
+    if params is None:
+        params = []
+    
+    try:
+        payload = {
+            "method": method,
+            "params": params
+        }
+        
+        async with session.post(
+            "https://mewc-rpc-mainnet.mewccrypto.com/rpc",
+            headers={"Content-Type": "application/json"},
+            json=payload
+        ) as response:
+            data = await response.json()
+            return data.get("result")
+    except Exception as e:
+        print(f"Error making RPC call {method}: {e}")
+        return None
 
 # Function to set a voice channel to private (disconnect for everyone)
 async def set_channel_private(category, channel):
@@ -58,11 +82,11 @@ async def create_or_update_channel(guild, category, channel_name, stat_value):
                 formatted_value = "{:,.2f}B MEWC".format(stat_value)
             elif channel_name.lower() == "price: $":
                 formatted_value = "{:.6f}".format(stat_value)
-            elif channel_name.lower() == "hashrate: gh/s":
+            elif channel_name.lower() in ["hashrate (meowpow): gh/s", "hashrate (script): gh/s"]:
                 formatted_value = "{:,.3f}".format(stat_value)
             elif channel_name.lower() == "market cap:":
                 formatted_value = "{:,.0f}".format(round(stat_value))
-            elif channel_name.lower() in ["difficulty:", "block:"]:
+            elif channel_name.lower() in ["difficulty (meowpow):", "difficulty (script):", "block:"]:
                 formatted_value = "{:,.0f}".format(stat_value)
             elif channel_name.lower() == "24h volume:":
                 formatted_value = "{:,.0f}".format(stat_value)
@@ -81,27 +105,54 @@ async def update_stats_channels(guild):
     try:
         # Fetch server statistics from the APIs
         async with aiohttp.ClientSession() as session:
+            # Get difficulty values using RPC
             try:
-                async with session.get("https://mewc.cryptoscope.io/api/getdifficulty") as response:
-                    difficulty_data = await response.json()
-                    difficulty = difficulty_data["difficulty_raw"]
-            except Exception:
-                difficulty = "N/A"
+                difficulty_meowpow = await make_rpc_call(session, "getdifficulty", [0])
+                if difficulty_meowpow is None:
+                    difficulty_meowpow = "N/A"
+            except Exception as e:
+                print(f"Error fetching MeowPow difficulty: {e}")
+                difficulty_meowpow = "N/A"
 
             try:
-                async with session.get("https://mewc.cryptoscope.io/api/getnetworkhashps") as response:
-                    hashrate_data = await response.json()
-                    hashrate = hashrate_data["hashrate_raw"] / 1e9  # Convert to GH/s
-            except Exception:
-                hashrate = "N/A"
+                difficulty_script = await make_rpc_call(session, "getdifficulty", [1])
+                if difficulty_script is None:
+                    difficulty_script = "N/A"
+            except Exception as e:
+                print(f"Error fetching Script difficulty: {e}")
+                difficulty_script = "N/A"
+
+            # Get hashrate values using RPC
+            try:
+                hashrate_meowpow = await make_rpc_call(session, "getnetworkhashps", [0, -1, "meowpow"])
+                if hashrate_meowpow is not None:
+                    hashrate_meowpow = hashrate_meowpow / 1e9  # Convert to GH/s
+                else:
+                    hashrate_meowpow = "N/A"
+            except Exception as e:
+                print(f"Error fetching MeowPow hashrate: {e}")
+                hashrate_meowpow = "N/A"
 
             try:
-                async with session.get("https://mewc.cryptoscope.io/api/getblockcount") as response:
-                    block_data = await response.json()
-                    block_count = block_data["blockcount"]
-            except Exception:
+                hashrate_script = await make_rpc_call(session, "getnetworkhashps", [0, -1, "scrypt"])
+                if hashrate_script is not None:
+                    hashrate_script = hashrate_script / 1e9  # Convert to GH/s
+                else:
+                    hashrate_script = "N/A"
+            except Exception as e:
+                print(f"Error fetching Script hashrate: {e}")
+                hashrate_script = "N/A"
+
+            # Get block count using RPC
+            try:
+                block_count = await make_rpc_call(session, "getblockcount", [])
+                if block_count is None:
+                    block_count = "N/A"
+            except Exception as e:
+                print(f"Error fetching block count: {e}")
                 block_count = "N/A"
 
+            # Keep using the old endpoint for supply (no replacement available yet)
             try:
                 async with session.get("https://mewc.cryptoscope.io/api/getcoinsupply") as response:
                     supply_data = await response.json()
@@ -135,7 +186,7 @@ async def update_stats_channels(guild):
                     else:
                         price_display = f"${current_price:.6f}"
                         
-                    print(f"\nCoinGecko data retrieved:")
+                    print("\nCoinGecko data retrieved:")
                     print(f"Price: ${current_price:.6f}")
                     print(f"24h Volume: ${volume_24h:,.2f}")
                     print(f"Market Cap: ${market_cap_usd:,.0f}")
@@ -167,11 +218,17 @@ async def update_stats_channels(guild):
         print(f"Members '{member_count}'")
         await create_or_update_channel(guild, category, "Members:", member_count)
         time.sleep(0.5)
-        print(f"Difficulty '{difficulty}'")
-        await create_or_update_channel(guild, category, "Difficulty:", difficulty)
+        print(f"Difficulty MeowPow '{difficulty_meowpow}'")
+        await create_or_update_channel(guild, category, "Difficulty (MeowPow):", difficulty_meowpow)
         time.sleep(0.5)
-        print(f"Hashrate '{hashrate}'")
-        await create_or_update_channel(guild, category, "Hashrate: GH/s", hashrate)
+        print(f"Difficulty Script '{difficulty_script}'")
+        await create_or_update_channel(guild, category, "Difficulty (Script):", difficulty_script)
+        time.sleep(0.5)
+        print(f"Hashrate MeowPow '{hashrate_meowpow}'")
+        await create_or_update_channel(guild, category, "Hashrate (MeowPow): GH/s", hashrate_meowpow)
+        time.sleep(0.5)
+        print(f"Hashrate Script '{hashrate_script}'")
+        await create_or_update_channel(guild, category, "Hashrate (Script): GH/s", hashrate_script)
         time.sleep(0.5)
         print(f"Block '{block_count}'")
         await create_or_update_channel(guild, category, "Block:", block_count)
