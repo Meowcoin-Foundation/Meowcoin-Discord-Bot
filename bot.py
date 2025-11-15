@@ -82,11 +82,11 @@ async def create_or_update_channel(guild, category, channel_name, stat_value):
                 formatted_value = "{:,.2f}B MEWC".format(stat_value)
             elif channel_name.lower() == "price: $":
                 formatted_value = "{:.6f}".format(stat_value)
-            elif channel_name.lower() in ["hashrate (meowpow): gh/s", "hashrate (script): gh/s"]:
+            elif channel_name.lower() in ["hashrate (meowpow): gh/s", "hashrate (scrypt): gh/s"]:
                 formatted_value = "{:,.3f}".format(stat_value)
             elif channel_name.lower() == "market cap:":
                 formatted_value = "{:,.0f}".format(round(stat_value))
-            elif channel_name.lower() in ["difficulty (meowpow):", "difficulty (script):", "block:"]:
+            elif channel_name.lower() in ["difficulty (meowpow):", "difficulty (scrypt):", "block:"]:
                 formatted_value = "{:,.0f}".format(stat_value)
             elif channel_name.lower() == "24h volume:":
                 formatted_value = "{:,.0f}".format(stat_value)
@@ -115,12 +115,12 @@ async def update_stats_channels(guild):
                 difficulty_meowpow = "N/A"
 
             try:
-                difficulty_script = await make_rpc_call(session, "getdifficulty", [1])
-                if difficulty_script is None:
-                    difficulty_script = "N/A"
+                difficulty_scrypt = await make_rpc_call(session, "getdifficulty", [1])
+                if difficulty_scrypt is None:
+                    difficulty_scrypt = "N/A"
             except Exception as e:
-                print(f"Error fetching Script difficulty: {e}")
-                difficulty_script = "N/A"
+                print(f"Error fetching Scrypt difficulty: {e}")
+                difficulty_scrypt = "N/A"
 
             # Get hashrate values using RPC
             try:
@@ -134,14 +134,14 @@ async def update_stats_channels(guild):
                 hashrate_meowpow = "N/A"
 
             try:
-                hashrate_script = await make_rpc_call(session, "getnetworkhashps", [0, -1, "scrypt"])
-                if hashrate_script is not None:
-                    hashrate_script = hashrate_script / 1e9  # Convert to GH/s
+                hashrate_scrypt = await make_rpc_call(session, "getnetworkhashps", [0, -1, "scrypt"])
+                if hashrate_scrypt is not None:
+                    hashrate_scrypt = hashrate_scrypt / 1e9  # Convert to GH/s
                 else:
-                    hashrate_script = "N/A"
+                    hashrate_scrypt = "N/A"
             except Exception as e:
-                print(f"Error fetching Script hashrate: {e}")
-                hashrate_script = "N/A"
+                print(f"Error fetching Scrypt hashrate: {e}")
+                hashrate_scrypt = "N/A"
 
             # Get block count using RPC
             try:
@@ -221,14 +221,14 @@ async def update_stats_channels(guild):
         print(f"Difficulty MeowPow '{difficulty_meowpow}'")
         await create_or_update_channel(guild, category, "Difficulty (MeowPow):", difficulty_meowpow)
         time.sleep(0.5)
-        print(f"Difficulty Script '{difficulty_script}'")
-        await create_or_update_channel(guild, category, "Difficulty (Script):", difficulty_script)
+        print(f"Difficulty Scrypt '{difficulty_scrypt}'")
+        await create_or_update_channel(guild, category, "Difficulty (Scrypt):", difficulty_scrypt)
         time.sleep(0.5)
         print(f"Hashrate MeowPow '{hashrate_meowpow}'")
         await create_or_update_channel(guild, category, "Hashrate (MeowPow): GH/s", hashrate_meowpow)
         time.sleep(0.5)
-        print(f"Hashrate Script '{hashrate_script}'")
-        await create_or_update_channel(guild, category, "Hashrate (Script): GH/s", hashrate_script)
+        print(f"Hashrate Scrypt '{hashrate_scrypt}'")
+        await create_or_update_channel(guild, category, "Hashrate (Scrypt): GH/s", hashrate_scrypt)
         time.sleep(0.5)
         print(f"Block '{block_count}'")
         await create_or_update_channel(guild, category, "Block:", block_count)
